@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Rootless stand-in for apt-get, used because this sandbox has no root/sudo.
+# It performs no real installation: it only reports which requested packages
+# are already available. `screen` is provided by the sibling screen shim.
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  update)
+    echo "[apt-get shim] update skipped (no root in this sandbox)"
+    ;;
+  install)
+    for p in "$@"; do
+      case "$p" in
+        -*) continue ;;
+      esac
+      if [ "$p" = "screen" ]; then
+        if [ -x /workspace/argo/bin/screen ]; then
+          echo "[apt-get shim] screen -> local shim (/workspace/argo/bin/screen)"
+        else
+          echo "[apt-get shim] ERROR: screen shim missing" >&2; exit 1
+        fi
+      elif command -v "$p" >/dev/null 2>&1; then
+        echo "[apt-get shim] $p -> already installed ($(command -v "$p"))"
+      elif dpkg -s "$p" >/dev/null 2>&1; then
+        echo "[apt-get shim] $p -> already installed (dpkg)"
+      else
+        echo "[apt-get shim] WARNING: '$p' not present and cannot be installed without root"
+      fi
+    done
+    ;;
+  *)
+    echo "[apt-get shim] ignoring unsupported subcommand '$cmd'"
+    ;;
+esac
+exit 0

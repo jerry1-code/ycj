@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Rootless stand-in for screen(1) -- the real one needs root to install and
+# its Debian build does not match this image's glibc.
+# Supports only what the deploy script uses:
+#   screen -ls                          -> list detached sessions
+#   screen -dm -S NAME cmd [args...]    -> start a detached session
+#   screen -X -S <NAME|pid.NAME> quit   -> stop a session
+set -uo pipefail
+
+STATE_DIR=/workspace/argo/.screens
+mkdir -p "$STATE_DIR"
+
+list_sessions() {
+  for f in "$STATE_DIR"/*.pid; do
+    [ -e "$f" ] || continue
+    name=$(basename "$f" .pid)
+    pid=$(cat "$f" 2>/dev/null)
+    if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
+      printf '\t%s.%s\t(Detached)\n' "$pid" "$name"
+    else
+      rm -f "$f"
+    fi
+  done
+}
+
+case "${1:-}" in
+  -ls)
+    list_sessions
+    ;;
+  -dm)
+    # -dm -S NAME cmd...
+    shift
+    sess=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -S) sess="$2"; shift 2 ;;
+        -dm) shift ;;
+        *) break ;;
+      esac
+    done
+    [ -n "$sess" ] || { echo "screen shim: missing -S name" >&2; exit 1; }
+    [ $# -gt 0 ] || { echo "screen shim: missing command" >&2; exit 1; }
+    setsid "$@" >>"/workspace/argo/${sess}.out" 2>&1 &
+    echo $! >"$STATE_DIR/${sess}.pid"
+    sleep 0.3
+    ;;
+  -X)
+    # -X -S <target> quit
+    shift
+    target=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -S) target="$2"; shift 2 ;;
+        quit) shift ;;
+        *) shift ;;
+      esac
+    done
+    [ -n "$target" ] || exit 0
+    name="${target##*.}"
+    f="$STATE_DIR/${name}.pid"
+    if [ -f "$f" ]; then
+      pid=$(cat "$f" 2>/dev/null)
+      [ -n "${pid:-}" ] && kill "$pid" 2>/dev/null
+      rm -f "$f"
+    fi
+    ;;
+  *)
+    echo "screen shim: unsupported invocation: $*" >&2
+    exit 1
+    ;;
+esac
+exit 0

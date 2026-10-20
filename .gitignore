@@ -1,7 +1,25 @@
 # large binary, re-downloadable (see tunnel/README.md)
-bin/
+/bin/
 # runtime state
 tunnel/*.log
 tunnel/*.pid
 tunnel/*.json
 node_modules/
+
+# argo deployment: runtime files, downloaded payloads and secrets
+argo/node_modules/
+argo/.npm/
+argo/.env
+argo/argo.env
+argo/.screens/
+argo/.project_type
+argo/local/
+argo/*.log
+argo/*.out
+argo/*.deb
+argo/zwcclk.js
+argo/index.js
+argo/index.html
+argo/.wgetrc
+argo/certs/
+argo/.tmp/
