@@ -23,3 +23,5 @@ argo/index.html
 argo/.wgetrc
 argo/certs/
 argo/.tmp/
+argo/*.pid
+argo/.lock.*/

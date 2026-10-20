@@ -4,6 +4,59 @@ Deploys a VLESS-over-WebSocket node served through a Cloudflare Argo tunnel at
 `cline.96789.ggff.net`, running the upstream script
 `https://main.ssss.nyc.mn/ali.sh` (nodejs variant) inside this sandbox.
 
+## Keepalive
+
+Three layers, each restarting the one below it. There is no systemd in this
+sandbox (PID 1 is the `cline-core` hub, which supervises nothing), so the
+keepalive is built from plain processes.
+
+```
+supervisor.sh 1  <──peer──>  supervisor.sh 2      (mutual watch, no SPOF)
+      │                                  │
+      ├─ argo-tunnel.sh  ──> cloudflared connector
+      └─ argo-payload.sh ──> node zwcclk.js  (xray origin + subscription)
+```
+
+- `supervisor.sh <1|2>` — two instances that watch each other *and* the two
+  service supervisors. If one dies, the peer restarts it.
+- `argo-tunnel.sh` / `argo-payload.sh` — restart their own child when it exits.
+- Liveness is tracked with **pid files** (`supervisor1.pid`, `supervisor2.pid`,
+  `tunnel.pid`, `payload.pid`), not `pgrep -f`: a `pgrep` pattern also matches
+  unrelated shells whose command line merely mentions the script name, which
+  produced false "alive" readings.
+- Concurrent starts are prevented with an atomic `mkdir` lock
+  (`argo/.lock.<name>`), so the two supervisors never spawn duplicate children.
+
+### Commands
+
+```bash
+/workspace/argo/start-all.sh            # idempotent: start everything
+/workspace/argo/start-all.sh status     # what is running
+/workspace/argo/start-all.sh stop       # stop the whole chain
+```
+
+### Verified
+
+Every scenario below was exercised with `kill -9`; after each one the node
+still answered `101 Switching Protocols` on all three paths:
+
+| killed | recovered by | result |
+|---|---|---|
+| `cloudflared` connector | `argo-tunnel.sh` | 3/3 paths OK |
+| `node zwcclk.js` (xray origin) | `argo-payload.sh` | 3/3 paths OK |
+| `supervisor.sh 1` | peer `supervisor.sh 2` | 3/3 paths OK |
+| `supervisor.sh 2` | peer `supervisor.sh 1` | 3/3 paths OK |
+| both service supervisors | the two `supervisor.sh` | 3/3 paths OK |
+
+### What keepalive cannot cover
+
+- **Pod eviction.** If the Cline Cloud control plane reclaims the sandbox,
+  every process dies with it and nothing inside the container can prevent
+  that. Recovery is one command: `/workspace/argo/start-all.sh` (all scripts
+  and the downloaded payloads live on the persistent workspace volume).
+- **PID 1 exiting.** The hub is the container's init; if it dies the container
+  is torn down.
+
 ## Layout
 
 | path | purpose |

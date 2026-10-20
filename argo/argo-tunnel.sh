@@ -8,6 +8,7 @@ set -uo pipefail
 DIR=/workspace/argo
 BIN=/workspace/bin/cloudflared
 LOG="$DIR/argo-tunnel.log"
+PIDFILE="$DIR/tunnel.pid"
 
 export SSL_CERT_FILE="$DIR/certs/bundle.crt"
 
@@ -21,6 +22,9 @@ if [ -z "$TOKEN" ]; then
 fi
 
 mkdir -p "$DIR"
+echo $$ >"$PIDFILE"
+trap 'rm -f "$PIDFILE"' EXIT
+
 while true; do
   echo "[$(date -u +%FT%TZ)] starting cloudflared" >>"$LOG"
   "$BIN" tunnel --edge-ip-version auto --no-autoupdate --protocol http2 \
