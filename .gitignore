@@ -1,0 +1,7 @@
+# large binary, re-downloadable (see tunnel/README.md)
+bin/
+# runtime state
+tunnel/*.log
+tunnel/*.pid
+tunnel/*.json
+node_modules/

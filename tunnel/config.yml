@@ -1,0 +1,35 @@
+# Cloudflare named tunnel config
+#
+# Setup (once, from a machine with the Cloudflare CLI logged in):
+#   cloudflared tunnel create my-sandbox
+#   cloudflared tunnel route dns my-sandbox dev.example.com
+#   cloudflared tunnel token create my-sandbox   # paste the token below
+#
+# Then:  /workspace/tunnel/run.sh
+#
+# NOTE: only expose a dedicated subdirectory (e.g. /workspace/public),
+#       never the whole workspace -- it contains git credentials,
+#       the hub auth token, and ~/.cline session data.
+
+tunnel: REPLACE_WITH_TUNNEL_ID_OR_UUID
+credentials-file: /workspace/tunnel/REPLACE_WITH_UUID.json
+# or, for token-based auth, comment the two lines above and use:
+# token: REPLACE_WITH_TUNNEL_TOKEN
+
+no-autoupdate: true
+protocol: http2
+
+# Keep-alive: cloudflared reconnects on its own; these tune the retry loop.
+edge: 4
+retries: 10
+grace-period: 30s
+heartbeat-interval: 30s
+no-checks: false
+
+ingress:
+  - hostname: dev.example.com
+    service: http://127.0.0.1:3000
+    originRequest:
+      connectTimeout: 10s
+      noTLSVerify: false
+  - service: http_status:404

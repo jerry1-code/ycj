@@ -1,0 +1,6 @@
+# Quick tunnel (no Cloudflare account needed) -- URL is random and CHANGES
+# every time cloudflared restarts. Use config.yml (named tunnel) for a
+# stable hostname.
+url: http://127.0.0.1:3000
+no-autoupdate: true
+protocol: http2
