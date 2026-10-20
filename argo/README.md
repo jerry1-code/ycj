@@ -24,6 +24,12 @@ supervisor.sh 1  <──peer──>  supervisor.sh 2      (mutual watch, no SPOF
   `tunnel.pid`, `payload.pid`), not `pgrep -f`: a `pgrep` pattern also matches
   unrelated shells whose command line merely mentions the script name, which
   produced false "alive" readings.
+- The check is stricter than `kill -0`: PID 1 here is the node hub, which does
+  not reap orphans, so a killed process lingers as a **zombie** and `kill -0`
+  still succeeds for it. The check therefore also requires the pid to be
+  non-zombie and its `/proc/<pid>/cmdline` to match the expected program
+  (which also rules out a recycled pid). Without this, the keepalive believed
+  dead supervisors were alive and never replaced them.
 - Concurrent starts are prevented with an atomic `mkdir` lock
   (`argo/.lock.<name>`), so the two supervisors never spawn duplicate children.
 

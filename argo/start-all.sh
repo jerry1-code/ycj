@@ -13,22 +13,33 @@ DIR=/workspace/argo
 cd "$DIR" || exit 1
 
 alive() {
-  local f="$1" pid
+  local f="$1" pat="${2:-}" pid st cmd
   [ -f "$f" ] || return 1
   pid=$(cat "$f" 2>/dev/null) || return 1
-  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+  [ -n "$pid" ] || return 1
+  if ! kill -0 "$pid" 2>/dev/null; then rm -f "$f"; return 1; fi
+  st=$(awk '{print $3}' "/proc/$pid/stat" 2>/dev/null)
+  if [ "$st" = "Z" ] || [ -z "$st" ]; then rm -f "$f"; return 1; fi
+  if [ -n "$pat" ]; then
+    cmd=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null)
+    case "$cmd" in
+      *"$pat"*) ;;
+      *) rm -f "$f"; return 1 ;;
+    esac
+  fi
+  return 0
 }
 
 case "${1:-start}" in
   status)
-    alive "$DIR/supervisor1.pid" && echo "OK      supervisor1 (pid $(cat "$DIR/supervisor1.pid"))" \
-                                 || echo "MISSING supervisor1"
-    alive "$DIR/supervisor2.pid" && echo "OK      supervisor2 (pid $(cat "$DIR/supervisor2.pid"))" \
-                                 || echo "MISSING supervisor2"
-    alive "$DIR/tunnel.pid"   && echo "OK      tunnel supervisor (pid $(cat "$DIR/tunnel.pid"))" \
-                              || echo "MISSING tunnel supervisor"
-    alive "$DIR/payload.pid"  && echo "OK      payload supervisor (pid $(cat "$DIR/payload.pid"))" \
-                              || echo "MISSING payload supervisor"
+    alive "$DIR/supervisor1.pid" "supervisor.sh 1" && echo "OK      supervisor1 (pid $(cat "$DIR/supervisor1.pid"))" \
+                                    || echo "MISSING supervisor1"
+    alive "$DIR/supervisor2.pid" "supervisor.sh 2" && echo "OK      supervisor2 (pid $(cat "$DIR/supervisor2.pid"))" \
+                                    || echo "MISSING supervisor2"
+    alive "$DIR/tunnel.pid" "argo-tunnel.sh" && echo "OK      tunnel supervisor (pid $(cat "$DIR/tunnel.pid"))" \
+                                           || echo "MISSING tunnel supervisor"
+    alive "$DIR/payload.pid" "argo-payload.sh" && echo "OK      payload supervisor (pid $(cat "$DIR/payload.pid"))" \
+                                             || echo "MISSING payload supervisor"
     pgrep -x cloudflared >/dev/null 2>&1 && echo "OK      cloudflared connector" || echo "MISSING cloudflared connector"
     pgrep -f 'node zwcclk[.]js' >/dev/null 2>&1 && echo "OK      payload (xray origin)" || echo "MISSING payload (xray origin)"
     echo "--- tunnel connections registered (last 200 log lines) ---"

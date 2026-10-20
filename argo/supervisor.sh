@@ -27,10 +27,24 @@ echo $$ >"$PIDFILE"
 trap 'rm -f "$PIDFILE"' EXIT
 
 alive() {
-  local f="$1" pid
+  local f="$1" pat="${2:-}" pid st cmd
   [ -f "$f" ] || return 1
   pid=$(cat "$f" 2>/dev/null) || return 1
-  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+  [ -n "$pid" ] || return 1
+  if ! kill -0 "$pid" 2>/dev/null; then rm -f "$f"; return 1; fi
+  # PID 1 here is the node hub, which does not reap orphans, so killed
+  # processes linger as zombies and `kill -0` still succeeds for them.
+  st=$(awk '{print $3}' "/proc/$pid/stat" 2>/dev/null)
+  if [ "$st" = "Z" ] || [ -z "$st" ]; then rm -f "$f"; return 1; fi
+  # also guard against a recycled pid
+  if [ -n "$pat" ]; then
+    cmd=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null)
+    case "$cmd" in
+      *"$pat"*) ;;
+      *) rm -f "$f"; return 1 ;;
+    esac
+  fi
+  return 0
 }
 
 echo "[$(date -u +%FT%TZ)] supervisor$ID started (pid $$)" >>"$LOG"
@@ -40,7 +54,7 @@ echo "[$(date -u +%FT%TZ)] supervisor$ID started (pid $$)" >>"$LOG"
 try_start() {
   local name="$1" script="$2"
   local lock="$DIR/.lock.$name"
-  alive "$DIR/$name.pid" && return 0
+  alive "$DIR/$name.pid" "$script" && return 0
   if mkdir "$lock" 2>/dev/null; then
     setsid nohup "$DIR/$script" >/dev/null 2>&1 &
     sleep 3
@@ -50,17 +64,17 @@ try_start() {
 
 while true; do
   # level 1: the two service supervisors
-  if ! alive "$DIR/tunnel.pid"; then
+  if ! alive "$DIR/tunnel.pid" "argo-tunnel.sh"; then
     echo "[$(date -u +%FT%TZ)] [sup$ID] tunnel supervisor not running -> starting" >>"$LOG"
     try_start tunnel argo-tunnel.sh
   fi
-  if ! alive "$DIR/payload.pid"; then
+  if ! alive "$DIR/payload.pid" "argo-payload.sh"; then
     echo "[$(date -u +%FT%TZ)] [sup$ID] payload supervisor not running -> starting" >>"$LOG"
     try_start payload argo-payload.sh
   fi
 
   # level 2: the peer supervisor
-  if ! alive "$DIR/supervisor${PEER}.pid"; then
+  if ! alive "$DIR/supervisor${PEER}.pid" "supervisor.sh $PEER"; then
     echo "[$(date -u +%FT%TZ)] [sup$ID] peer supervisor$PEER not running -> starting" >>"$LOG"
     if mkdir "$DIR/.lock.supervisor${PEER}" 2>/dev/null; then
       setsid nohup "$DIR/supervisor.sh" "$PEER" >/dev/null 2>&1 &
