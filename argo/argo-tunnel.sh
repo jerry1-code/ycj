@@ -27,6 +27,10 @@ trap 'rm -f "$PIDFILE"' EXIT
 
 while true; do
   echo "[$(date -u +%FT%TZ)] starting cloudflared" >>"$LOG"
+  # Drop a connector orphaned by a SIGKILLed supervisor, otherwise two
+  # connectors keep registering the same tunnel.
+  pkill -9 -f 'bin/cloudflared tunnel' 2>/dev/null
+  sleep 1
   "$BIN" tunnel --edge-ip-version auto --no-autoupdate --protocol http2 \
     run --token "$TOKEN" >>"$LOG" 2>&1
   echo "[$(date -u +%FT%TZ)] cloudflared exited, restarting in 5s" >>"$LOG"
