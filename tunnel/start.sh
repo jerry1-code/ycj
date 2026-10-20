@@ -14,7 +14,9 @@ PIDFILE="$DIR/tunnel.pid"
 case "${1:-start}" in
   stop)
     [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null
-    pkill -x -f '/workspace/tunnel/run.sh' 2>/dev/null
+    # the [.] trick keeps the pattern from matching this script's own cmdline
+    pkill -f 'tunnel/run[.]sh' 2>/dev/null
+    pkill -f 'tunnel/serve[.]sh' 2>/dev/null
     pkill -x cloudflared 2>/dev/null
     rm -f "$PIDFILE"
     echo "stopped"
